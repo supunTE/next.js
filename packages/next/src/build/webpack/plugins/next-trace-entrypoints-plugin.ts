@@ -40,8 +40,6 @@ const NOT_TRACEABLE = [
   '.svg',
 ]
 
-const TURBO_TRACE_DEFAULT_MAX_FILES = 128
-
 function getModuleFromDependency(
   compilation: any,
   dep: any
@@ -184,7 +182,7 @@ export class TraceEntryPointsPlugin implements webpack.WebpackPluginInstance {
       }
 
       // startTrace existed and callable
-      if (this.turbotrace && !this.turbotrace.skipEntries) {
+      if (this.turbotrace) {
         let binding = (await loadBindings()) as any
         if (
           !binding?.isWasm &&
@@ -404,7 +402,7 @@ export class TraceEntryPointsPlugin implements webpack.WebpackPluginInstance {
               }
             })
             // startTrace existed and callable
-            if (this.turbotrace) {
+            if (this.turbotrace && !this.turbotrace.skipEntries) {
               let binding = (await loadBindings()) as any
               if (
                 !binding?.isWasm &&
@@ -417,35 +415,20 @@ export class TraceEntryPointsPlugin implements webpack.WebpackPluginInstance {
                   .traceAsyncFn(async () => {
                     const contextDirectory =
                       this.turbotrace?.contextDirectory ?? this.tracingRoot
-                    const maxFiles =
-                      this.turbotrace?.maxFiles ?? TURBO_TRACE_DEFAULT_MAX_FILES
-                    let chunks = [...entriesToTrace]
-                    let restChunks =
-                      chunks.length > maxFiles ? chunks.splice(maxFiles) : []
-                    let filesTracedInEntries: string[] = []
-                    while (chunks.length) {
-                      filesTracedInEntries = filesTracedInEntries.concat(
-                        await binding.turbo.startTrace({
-                          action: 'print',
-                          input: chunks,
-                          contextDirectory,
-                          processCwd:
-                            this.turbotrace?.processCwd ?? this.appDir,
-                          logLevel: this.turbotrace?.logLevel,
-                          showAll: this.turbotrace?.logAll,
-                          memoryLimit:
-                            this.turbotrace?.memoryLimit ??
-                            TURBO_TRACE_DEFAULT_MEMORY_LIMIT,
-                        })
-                      )
-                      chunks = restChunks
-                      if (restChunks.length) {
-                        restChunks =
-                          chunks.length > maxFiles
-                            ? chunks.splice(maxFiles)
-                            : []
-                      }
-                    }
+                    const chunks = [...entriesToTrace]
+
+                    const filesTracedInEntries: string[] =
+                      await binding.turbo.startTrace({
+                        action: 'print',
+                        input: chunks,
+                        contextDirectory,
+                        processCwd: this.turbotrace?.processCwd ?? this.appDir,
+                        logLevel: this.turbotrace?.logLevel,
+                        showAll: this.turbotrace?.logAll,
+                        memoryLimit:
+                          this.turbotrace?.memoryLimit ??
+                          TURBO_TRACE_DEFAULT_MEMORY_LIMIT,
+                      })
 
                     // only trace the assets under the appDir
                     // exclude files from node_modules, entries and processed by webpack
@@ -818,35 +801,27 @@ export class TraceEntryPointsPlugin implements webpack.WebpackPluginInstance {
             !binding?.isWasm &&
             typeof binding.turbo.startTrace === 'function'
           ) {
-            const maxFiles =
-              this.turbotrace?.maxFiles ?? TURBO_TRACE_DEFAULT_MAX_FILES
             const ignores = [...TRACE_IGNORES, ...this.traceIgnores]
 
             const ignoreFn = (path: string) => {
               return isMatch(path, ignores, { contains: true, dot: true })
             }
-            let chunks = this.chunksToTrace.filter((chunk) => !ignoreFn(chunk))
-            let restChunks =
-              chunks.length > maxFiles ? chunks.splice(maxFiles) : []
-            while (chunks.length) {
-              await binding.turbo.startTrace({
-                action: 'annotate',
-                input: chunks,
-                contextDirectory:
-                  this.turbotrace?.contextDirectory ?? this.tracingRoot,
-                processCwd: this.turbotrace?.processCwd ?? this.appDir,
-                showAll: this.turbotrace?.logAll,
-                logLevel: this.turbotrace?.logLevel,
-                memoryLimit:
-                  this.turbotrace?.memoryLimit ??
-                  TURBO_TRACE_DEFAULT_MEMORY_LIMIT,
-              })
-              chunks = restChunks
-              if (restChunks.length) {
-                restChunks =
-                  chunks.length > maxFiles ? chunks.splice(maxFiles) : []
-              }
-            }
+            const chunks = this.chunksToTrace.filter(
+              (chunk) => !ignoreFn(chunk)
+            )
+
+            await binding.turbo.startTrace({
+              action: 'annotate',
+              input: chunks,
+              contextDirectory:
+                this.turbotrace?.contextDirectory ?? this.tracingRoot,
+              processCwd: this.turbotrace?.processCwd ?? this.appDir,
+              showAll: this.turbotrace?.logAll,
+              logLevel: this.turbotrace?.logLevel,
+              memoryLimit:
+                this.turbotrace?.memoryLimit ??
+                TURBO_TRACE_DEFAULT_MEMORY_LIMIT,
+            })
             if (this.turbotraceOutputPath && this.turbotraceFiles) {
               const existedNftFile = await nodeFs.promises
                 .readFile(this.turbotraceOutputPath, 'utf8')
