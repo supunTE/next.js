@@ -261,8 +261,36 @@ When a font function is called on a page of your site, it is not globally availa
 Every time you call the `localFont` or Google font function, that font is hosted as one instance in your application. Therefore, if you load the same font function in multiple files, multiple instances of the same font are hosted. In this situation, it is recommended to do the following:
 
 - Call the font loader function in one shared file
+
+```js
+// util/fonts.js
+import { Inter } from '@next/font/google'
+```
+
 - Export it as a constant
+
+```js
+export const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: "swap"
+})
+```
+
 - Import the constant in each file where you would like to use this font
+
+```js
+// pages/_app.js
+import { inter } from '@/util/fonts.js'
+
+export default function MyApp({ Component, pageProps }) {
+  return (
+    <main className={`${inter.variable} font-sans`}>
+      <Component {...pageProps} />
+    </main>
+  )
+}
+```
 
 ## Next Steps
 
